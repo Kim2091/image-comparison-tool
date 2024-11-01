@@ -1,0 +1,609 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Advanced Image Comparison Tool</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            background-color: #f0f0f0;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .controls {
+            display: flex;
+            gap: 10px;
+        }
+
+        .upload-container {
+            display: flex;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+
+        .button {
+            padding: 8px 16px;
+            background: #fff;
+            border: 2px solid #ddd;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            color: #333;
+            transition: all 0.2s;
+        }
+
+        .button:hover {
+            border-color: #666;
+            background: #f5f5f5;
+        }
+
+        .button.active {
+            background: #007bff;
+            color: white;
+            border-color: #0056b3;
+        }
+
+        .upload-button {
+            flex: 1;
+            padding: 12px;
+        }
+
+        .comparison-container {
+            position: relative;
+            width: 100%;
+            aspect-ratio: 4/3;
+            background: #f5f5f5;
+            border-radius: 8px;
+            cursor: move;
+            overflow: hidden;
+        }
+
+        .placeholder {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #666;
+            font-size: 16px;
+        }
+
+        .image-container {
+            position: absolute;
+            inset: 0;
+            display: none;
+            transform-origin: 0 0;
+        }
+
+        .image-container.active {
+            display: block;
+        }
+
+        .image-sides {
+            position: relative;
+            width: 100%;
+            height: 100%;
+        }
+
+        .image-left, .image-right {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+        }
+
+        .slider-handle {
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            width: 4px;
+            background: white;
+            cursor: ew-resize;
+            left: 50%;
+            transform: translateX(-50%);
+            display: none;
+        }
+
+        .slider-handle.active {
+            display: block;
+        }
+
+        .slider-button {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 24px;
+            height: 48px;
+            background: white;
+            border-radius: 24px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        }
+
+        .file-input {
+            display: none;
+        }
+
+        .zoom-controls {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            display: flex;
+            gap: 10px;
+            z-index: 1000;
+        }
+
+        .difference-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            display: none;
+            object-fit: contain;
+        }
+
+
+        .difference-overlay.active {
+            display: block;
+        }
+
+        .status-bar {
+            margin-top: 10px;
+            padding: 10px;
+            background: #f8f9fa;
+            border-radius: 4px;
+            font-size: 14px;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Image Comparison Tool</h1>
+            <div class="controls">
+                <button class="button active" id="sliderMode">Slider Mode</button>
+                <button class="button" id="switchMode">Switch Mode</button>
+                <button class="button" id="diffMode">Difference Mode</button>
+                <button class="button" id="snapshot">Take Snapshot</button>
+            </div>
+        </div>
+        
+        <div class="upload-container">
+            <button class="button upload-button" onclick="document.getElementById('leftInput').click()">
+                Select Left Image
+            </button>
+            <button class="button upload-button" onclick="document.getElementById('rightInput').click()">
+                Select Right Image
+            </button>
+        </div>
+
+        <input type="file" id="leftInput" class="file-input" accept="image/*">
+        <input type="file" id="rightInput" class="file-input" accept="image/*">
+
+        <div class="comparison-container" id="comparisonContainer">
+            <div class="placeholder">Please select both images to compare</div>
+            
+            <div class="image-container">
+                <div class="image-sides">
+                    <img class="image-left" alt="Left comparison">
+                    <img class="image-right" alt="Right comparison">
+                </div>
+                <div class="slider-handle">
+                    <div class="slider-button"></div>
+                </div>
+                <canvas class="difference-overlay"></canvas>
+            </div>
+
+            
+
+            <div class="zoom-controls">
+                <button class="button" id="zoomIn">+</button>
+                <button class="button" id="zoomReset">Reset</button>
+                <button class="button" id="zoomOut">-</button>
+            </div>
+        </div>
+
+        <div class="status-bar">
+            Use mouse wheel to zoom, drag to pan. In switch mode, use left/right arrow keys to switch between images.
+        </div>
+    </div>
+
+    <script>
+        const leftInput = document.getElementById('leftInput');
+        const rightInput = document.getElementById('rightInput');
+        const leftImage = document.querySelector('.image-left');
+        const rightImage = document.querySelector('.image-right');
+        const placeholder = document.querySelector('.placeholder');
+        const imageContainer = document.querySelector('.image-container');
+        const sliderHandle = document.querySelector('.slider-handle');
+        const comparisonContainer = document.getElementById('comparisonContainer');
+        const diffCanvas = document.querySelector('.difference-overlay');
+        const diffCtx = diffCanvas.getContext('2d');
+
+        let handlePosition = 50;
+        let scale = 1;
+        let translateX = 0;
+        let translateY = 0;
+        let isDragging = false;
+        let lastX = 0;
+        let lastY = 0;
+        let currentMode = 'slider';
+        let currentImage = 'left';
+
+        // Mode switching
+        document.getElementById('sliderMode').addEventListener('click', () => setMode('slider'));
+        document.getElementById('switchMode').addEventListener('click', () => setMode('switch'));
+        document.getElementById('diffMode').addEventListener('click', () => setMode('diff'));
+
+        function setMode(mode) {
+            currentMode = mode;
+            document.querySelectorAll('.controls .button').forEach(btn => btn.classList.remove('active'));
+            document.getElementById(`${mode}Mode`).classList.add('active');
+
+            // Reset view
+            leftImage.style.display = 'block';
+            rightImage.style.display = 'block';
+            
+            // Clear any clip paths when changing modes
+            leftImage.style.clipPath = 'none';
+            rightImage.style.clipPath = 'none';
+            
+            sliderHandle.style.display = mode === 'slider' ? 'block' : 'none';
+            diffCanvas.classList.toggle('active', mode === 'diff');
+
+            if (mode === 'switch') {
+                updateSwitchView();
+            } else if (mode === 'slider') {
+                updateImages(handlePosition);
+            } else if (mode === 'diff') {
+                calculateDifference();
+            }
+        }
+
+        // Keyboard controls for switch mode
+        document.addEventListener('keydown', (e) => {
+            if (currentMode === 'switch') {
+                if (e.key === 'ArrowLeft') {
+                    currentImage = 'left';
+                    updateSwitchView();
+                } else if (e.key === 'ArrowRight') {
+                    currentImage = 'right';
+                    updateSwitchView();
+                }
+            }
+        });
+
+        // Zooming functionality
+        comparisonContainer.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            const delta = e.deltaY > 0 ? -0.1 : 0.1;
+            const rect = comparisonContainer.getBoundingClientRect();
+            const mouseX = e.clientX - rect.left;
+            const mouseY = e.clientY - rect.top;
+
+            // Calculate new scale
+            const newScale = Math.min(Math.max(0.5, scale + delta), 5);
+            
+            // Adjust translation to zoom towards mouse position
+            const scaleChange = newScale - scale;
+            translateX -= (mouseX - translateX) * (scaleChange / scale);
+            translateY -= (mouseY - translateY) * (scaleChange / scale);
+            
+            scale = newScale;
+            updateTransform();
+        });
+
+        // Pan functionality
+        comparisonContainer.addEventListener('mousedown', (e) => {
+            if (e.target === sliderHandle || e.target.closest('.slider-handle')) return;
+            isDragging = true;
+            lastX = e.clientX;
+            lastY = e.clientY;
+        });
+
+        document.addEventListener('mousemove', (e) => {
+            if (!isDragging) return;
+            const deltaX = e.clientX - lastX;
+            const deltaY = e.clientY - lastY;
+            translateX += deltaX;
+            translateY += deltaY;
+            lastX = e.clientX;
+            lastY = e.clientY;
+            updateTransform();
+        });
+
+        document.addEventListener('mouseup', () => {
+            isDragging = false;
+        });
+
+        function updateTransform() {
+            imageContainer.style.transform = `translate(${translateX}px, ${translateY}px) scale(${scale})`;
+        }
+
+        // Zoom controls
+        document.getElementById('zoomIn').addEventListener('click', () => {
+            scale = Math.min(scale + 0.2, 5);
+            updateTransform();
+        });
+
+        document.getElementById('zoomOut').addEventListener('click', () => {
+            scale = Math.max(scale - 0.2, 0.5);
+            updateTransform();
+        });
+
+        document.getElementById('zoomReset').addEventListener('click', () => {
+            scale = 1;
+            translateX = 0;
+            translateY = 0;
+            updateTransform();
+        });
+
+        // Snapshot functionality
+        document.getElementById('snapshot').addEventListener('click', () => {
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            
+            // Use the natural dimensions of the images for full resolution
+            const width = Math.max(leftImage.naturalWidth, rightImage.naturalWidth);
+            const height = Math.max(leftImage.naturalHeight, rightImage.naturalHeight);
+            
+            canvas.width = width;
+            canvas.height = height;
+
+            // Draw background
+            ctx.fillStyle = '#f5f5f5';
+            ctx.fillRect(0, 0, width, height);
+
+            // Draw current view based on mode
+            if (currentMode === 'slider') {
+                // Calculate the split position in actual pixels
+                const splitX = Math.floor(width * (handlePosition / 100));
+                
+                // Draw left image
+                ctx.save();
+                ctx.beginPath();
+                ctx.rect(0, 0, splitX, height);
+                ctx.clip();
+                ctx.drawImage(leftImage, 0, 0, width, height);
+                ctx.restore();
+
+                // Draw right image
+                ctx.save();
+                ctx.beginPath();
+                ctx.rect(splitX, 0, width - splitX, height);
+                ctx.clip();
+                ctx.drawImage(rightImage, 0, 0, width, height);
+                ctx.restore();
+
+                // Draw slider line
+                ctx.fillStyle = 'white';
+                ctx.fillRect(splitX - 2, 0, 4, height);
+            } else if (currentMode === 'switch') {
+                // Draw the full current image at full resolution
+                ctx.drawImage(
+                    currentImage === 'left' ? leftImage : rightImage,
+                    0, 0, width, height
+                );
+            } else if (currentMode === 'diff') {
+                // Recalculate difference at full resolution for the snapshot
+                const tempCanvas1 = document.createElement('canvas');
+                const tempCanvas2 = document.createElement('canvas');
+                tempCanvas1.width = tempCanvas2.width = width;
+                tempCanvas1.height = tempCanvas2.height = height;
+
+                const ctx1 = tempCanvas1.getContext('2d');
+                const ctx2 = tempCanvas2.getContext('2d');
+
+                // Draw full resolution images
+                ctx1.drawImage(leftImage, 0, 0, width, height);
+                ctx2.drawImage(rightImage, 0, 0, width, height);
+
+                // Get image data
+                const data1 = ctx1.getImageData(0, 0, width, height);
+                const data2 = ctx2.getImageData(0, 0, width, height);
+                const diff = ctx.createImageData(width, height);
+
+                // Compare pixels at full resolution
+                for (let i = 0; i < data1.data.length; i += 4) {
+                    const r1 = data1.data[i];
+                    const g1 = data1.data[i + 1];
+                    const b1 = data1.data[i + 2];
+                    
+                    const r2 = data2.data[i];
+                    const g2 = data2.data[i + 1];
+                    const b2 = data2.data[i + 2];
+
+                    const difference = Math.abs(r1 - r2) + Math.abs(g1 - g2) + Math.abs(b1 - b2);
+
+                    if (difference > 30) {
+                        diff.data[i] = 255;     // Red
+                        diff.data[i + 1] = 0;   // Green
+                        diff.data[i + 2] = 0;   // Blue
+                        diff.data[i + 3] = 128;  // Semi-transparent
+                    } else {
+                        // For the snapshot, we'll show the original image with differences overlaid
+                        diff.data[i] = r1;
+                        diff.data[i + 1] = g1;
+                        diff.data[i + 2] = b1;
+                        diff.data[i + 3] = 255;
+                    }
+                }
+
+                ctx.putImageData(diff, 0, 0);
+            }
+
+            // Download the full resolution snapshot
+            const link = document.createElement('a');
+            link.download = `comparison-snapshot-${currentMode}-${Date.now()}.png`;
+            link.href = canvas.toDataURL('image/png');
+            link.click();
+        });
+
+        function updateSwitchView() {
+            // Remove any clip paths
+            leftImage.style.clipPath = 'none';
+            rightImage.style.clipPath = 'none';
+            
+            // Show/hide full images
+            leftImage.style.display = currentImage === 'left' ? 'block' : 'none';
+            rightImage.style.display = currentImage === 'right' ? 'block' : 'none';
+        }
+
+        function updateImages(position) {
+            if (currentMode === 'slider') {
+                leftImage.style.display = 'block';
+                rightImage.style.display = 'block';
+                leftImage.style.clipPath = `polygon(0 0, ${position}% 0, ${position}% 100%, 0 100%)`;
+                rightImage.style.clipPath = `polygon(100% 0, 100% 100%, ${position}% 100%, ${position}% 0)`;
+                sliderHandle.style.left = `${position}%`;
+            }
+        }
+
+        function calculateDifference() {
+            if (!leftImage.src || !rightImage.src) return;
+
+            const width = leftImage.naturalWidth;
+            const height = leftImage.naturalHeight;
+
+            diffCanvas.width = width;
+            diffCanvas.height = height;
+
+            const tempCanvas1 = document.createElement('canvas');
+            const tempCanvas2 = document.createElement('canvas');
+            tempCanvas1.width = tempCanvas2.width = width;
+            tempCanvas1.height = tempCanvas2.height = height;
+
+            const ctx1 = tempCanvas1.getContext('2d');
+            const ctx2 = tempCanvas2.getContext('2d');
+
+            // Draw images to temporary canvases
+            ctx1.drawImage(leftImage, 0, 0);
+            ctx2.drawImage(rightImage, 0, 0);
+
+            // Get image data
+            const data1 = ctx1.getImageData(0, 0, width, height);
+            const data2 = ctx2.getImageData(0, 0, width, height);
+            const diff = diffCtx.createImageData(width, height);
+
+            // Compare pixels
+            for (let i = 0; i < data1.data.length; i += 4) {
+                const r1 = data1.data[i];
+                const g1 = data1.data[i + 1];
+                const b1 = data1.data[i + 2];
+                
+                const r2 = data2.data[i];
+                const g2 = data2.data[i + 1];
+                const b2 = data2.data[i + 2];
+
+                const difference = Math.abs(r1 - r2) + Math.abs(g1 - g2) + Math.abs(b1 - b2);
+
+                if (difference > 30) {
+                    diff.data[i] = 255;     // Red
+                    diff.data[i + 1] = 0;   // Green
+                    diff.data[i + 2] = 0;   // Blue
+                    diff.data[i + 3] = 128;  // Semi-transparent
+                } else {
+                    diff.data[i] = 0;
+                    diff.data[i + 1] = 0;
+                    diff.data[i + 2] = 0;
+                    diff.data[i + 3] = 0;
+                }
+            }
+
+            diffCtx.putImageData(diff, 0, 0);
+        }
+
+        function handleFileSelect(e, isLeft) {
+            const file = e.target.files[0];
+            if (file && file.type.startsWith('image/')) {
+                const url = URL.createObjectURL(file);
+                const img = isLeft ? leftImage : rightImage;
+                
+                img.onload = () => {
+                    if (leftImage.src && rightImage.src) {
+                        placeholder.style.display = 'none';
+                        imageContainer.classList.add('active');
+                        sliderHandle.classList.add('active');
+                        updateImages(handlePosition);
+                        
+                        // Set canvas dimensions to match images
+                        diffCanvas.width = img.naturalWidth;
+                        diffCanvas.height = img.naturalHeight;
+                        
+                        if (currentMode === 'diff') {
+                            calculateDifference();
+                        }
+                    }
+                };
+                
+                img.src = url;
+            }
+        }
+
+        leftInput.addEventListener('change', (e) => handleFileSelect(e, true));
+        rightInput.addEventListener('change', (e) => handleFileSelect(e, false));
+
+        sliderHandle.addEventListener('mousedown', function(e) {
+            e.preventDefault();
+            const handleDrag = (e) => {
+                const rect = imageContainer.getBoundingClientRect();
+                const x = Math.min(Math.max(0, e.clientX - rect.left), rect.width);
+                handlePosition = (x / rect.width) * 100;
+                updateImages(handlePosition);
+            };
+
+            const handleMouseUp = () => {
+                document.removeEventListener('mousemove', handleDrag);
+                document.removeEventListener('mouseup', handleMouseUp);
+            };
+
+            document.addEventListener('mousemove', handleDrag);
+            document.addEventListener('mouseup', handleMouseUp);
+        });
+
+        // Clean up object URLs when new files are selected
+        leftInput.addEventListener('change', () => {
+            if (leftImage.src) {
+                URL.revokeObjectURL(leftImage.src);
+            }
+        });
+
+        rightInput.addEventListener('change', () => {
+            if (rightImage.src) {
+                URL.revokeObjectURL(rightImage.src);
+            }
+        });
+
+        // Initialize with slider mode
+        setMode('slider');
+    </script>
+</body>
+</html>
